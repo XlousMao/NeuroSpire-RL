@@ -358,6 +358,91 @@ PYBIND11_MODULE(slaythespire, m) {
                },
                "returns a copy of the exhaust pile from the current battle context"
         )
+        .def("get_observation_props", [](GameContext &gc) {
+             pybind11::dict d;
+             if (sts::g_debug_bc != nullptr) {
+                 const auto &bc = *sts::g_debug_bc;
+                 const auto &p = bc.player;
+                 
+                 // Player Stats
+                  d["cur_hp"] = p.curHp;
+                  d["max_hp"] = p.maxHp;
+                  d["gold"] = p.gold; // Player struct has gold? Yes.
+                  d["block"] = p.block;
+                  d["energy"] = p.energy;
+                 
+                 // Player Buffs
+                 d["strength"] = p.strength;
+                 d["dexterity"] = p.dexterity;
+                 d["focus"] = p.focus; // For defect, but harmless
+                 d["vulnerable"] = p.hasStatus<PlayerStatus::VULNERABLE>() ? p.getStatus<PlayerStatus::VULNERABLE>() : 0;
+                 d["weak"] = p.hasStatus<PlayerStatus::WEAK>() ? p.getStatus<PlayerStatus::WEAK>() : 0;
+                 d["frail"] = p.hasStatus<PlayerStatus::FRAIL>() ? p.getStatus<PlayerStatus::FRAIL>() : 0;
+                 d["artifact"] = p.artifact;
+                 
+                 // Monsters (raw data for python to process)
+                 pybind11::list monsters;
+                 for (int i = 0; i < bc.monsters.monsterCount; ++i) {
+                     const auto &m = bc.monsters.arr[i];
+                     pybind11::dict md;
+                     md["is_alive"] = m.isAlive();
+                     md["cur_hp"] = m.curHp;
+                     md["max_hp"] = m.maxHp;
+                     md["block"] = m.block;
+                     
+                     md["intent_id"] = static_cast<int>(m.moveHistory[0]); 
+                     
+                     // Calculate damage for intent
+                     // We need `calculateDamageToPlayer`.
+                     // But that requires `BattleContext`.
+                     // We are inside lambda with `bc`.
+                     int baseDmg = 0;
+                     int hits = 0;
+                     // We need to know the base damage of the move. 
+                     // `Monster::getMoveBaseDamage(bc)` seems to exist in `Monster.h` line 160!
+                     auto dmgInfo = m.getMoveBaseDamage(bc);
+                     md["intent_dmg"] = m.calculateDamageToPlayer(bc, dmgInfo.damage);
+                     md["intent_hits"] = dmgInfo.attackCount;
+                     
+                     monsters.append(md);
+                 }
+                 d["monsters"] = monsters;
+                 
+                 // Hand (raw data)
+                 pybind11::list hand;
+                 for (int i = 0; i < bc.cards.cardsInHand; ++i) {
+                     const auto &c = bc.cards.hand[i];
+                     pybind11::dict cd;
+                     cd["id"] = static_cast<int>(c.getId());
+                     cd["cost"] = c.costForTurn;
+                     cd["upgraded"] = c.isUpgraded() ? 1 : 0;
+                     hand.append(cd);
+                 }
+                 d["hand"] = hand;
+                 
+                 // Global / Piles
+                  d["floor_num"] = gc.floorNum; // GameContext has floorNum
+                  d["draw_pile_size"] = bc.cards.drawPile.size();
+                  d["discard_pile_size"] = bc.cards.discardPile.size();
+                  d["exhaust_pile_size"] = bc.cards.exhaustPile.size();
+                 
+                 // Relics/Powers booleans
+                 d["has_corruption"] = p.hasStatus<PlayerStatus::CORRUPTION>();
+                 d["has_dark_embrace"] = p.hasStatus<PlayerStatus::DARK_EMBRACE>();
+                 d["has_dead_branch"] = p.hasRelic<RelicId::DEAD_BRANCH>();
+                 
+             } else {
+                 // Return zeros/empty if not in combat
+                 d["block"] = 0;
+                 d["energy"] = 0;
+                 d["monsters"] = pybind11::list();
+                 d["hand"] = pybind11::list();
+                 d["draw_pile_size"] = 0;
+                 d["discard_pile_size"] = 0;
+                 d["exhaust_pile_size"] = 0;
+             }
+             return d;
+        }, "Get raw observation properties for Python vectorization")
         .def("obtain_card",
              [](GameContext &gc, Card card) { gc.deck.obtain(gc, card); },
              "add a card to the deck"
