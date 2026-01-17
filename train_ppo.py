@@ -5,10 +5,29 @@ import numpy as np
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
 from stable_baselines3.common.monitor import Monitor
-from stable_baselines3.common.callbacks import CheckpointCallback
+from stable_baselines3.common.callbacks import CheckpointCallback, BaseCallback
 
 # Import our custom environment
 from sts_env import StsEnv
+
+class TensorboardCallback(BaseCallback):
+    """
+    Custom callback for plotting additional values in tensorboard.
+    """
+    def __init__(self, verbose=0):
+        super(TensorboardCallback, self).__init__(verbose)
+
+    def _on_step(self) -> bool:
+        # Log floor number and HP from info dict when episode ends
+        for info in self.locals['infos']:
+            if "floor" in info:
+                self.logger.record("rollout/current_floor", info["floor"])
+            if "hp_percent" in info:
+                self.logger.record("rollout/hp_percent", info["hp_percent"])
+            if "episode" in info: # Standard Monitor wrapper key
+                # Monitor wrapper usually puts 'r', 'l', 't' in 'episode' dict
+                pass
+        return True
 
 def make_env(rank, seed=0):
     """
@@ -51,7 +70,7 @@ def main():
     n_steps = 2048
     batch_size = 2048 
     n_epochs = 10
-    total_timesteps = 100000 # Short run for demo, can be increased
+    total_timesteps = 100000 # 100k Steps
     
     print(f"Initializing {num_cpu} parallel environments...")
     
@@ -84,10 +103,12 @@ def main():
     
     # 4. Callbacks
     checkpoint_callback = CheckpointCallback(
-        save_freq=10000,
+        save_freq=10000, # Every 10k steps
         save_path='./checkpoints/',
-        name_prefix='sts_ppo_model'
+        name_prefix='sts_ppo'
     )
+    
+    tb_callback = TensorboardCallback()
     
     print(f"Starting Training for {total_timesteps} timesteps...")
     start_time = time.time()
@@ -95,7 +116,7 @@ def main():
     try:
         model.learn(
             total_timesteps=total_timesteps, 
-            callback=checkpoint_callback,
+            callback=[checkpoint_callback, tb_callback],
             progress_bar=True
         )
     except Exception as e:

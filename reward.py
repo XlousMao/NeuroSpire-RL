@@ -115,6 +115,20 @@ def calculate_rational_reward(gc, obs_prev, obs_curr):
         reward += r_gold
         info['gold'] = r_gold
         
+    # Floor Climb
+    # Floor is usually encoded in observation too, but we can access via gc for reliability if obs is normalized
+    # Or use obs[67] (Floor/50)
+    # Let's rely on obs diff for speed
+    floor_prev = obs_prev[67]
+    floor_curr = obs_curr[67]
+    if floor_curr > floor_prev:
+        # Climbed a floor!
+        # 1 floor = 1/50 = 0.02.
+        # Reward: +1.0 per floor
+        r_floor = (floor_curr - floor_prev) * 50.0 * 1.0 
+        reward += r_floor
+        info['floor_climb'] = r_floor
+        
     # Deck Thinning (Index 69: DeckSize/50)
     deck_prev = obs_prev[69]
     deck_curr = obs_curr[69]

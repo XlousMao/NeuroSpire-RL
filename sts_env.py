@@ -4,6 +4,14 @@ import numpy as np
 import random
 
 # Import our custom modules
+import sys
+import os
+
+# Add build/Release to path to find the compiled extension
+pyd_path = os.path.join(os.path.dirname(__file__), "build", "Release")
+if os.path.exists(pyd_path):
+    sys.path.append(pyd_path)
+
 import slaythespire
 import observation
 import reward
@@ -57,14 +65,16 @@ class StsEnv(gym.Env):
         super().reset(seed=seed)
         
         # Initialize GameContext
-        # Fixed Seed 1 for stability during dev, or random?
-        # gym.Env seed is usually handled by seeding random generators.
-        # We can pass seed to GameContext.
         game_seed = seed if seed is not None else random.randint(0, 10000)
         self.gc = slaythespire.GameContext(slaythespire.CharacterClass.IRONCLAD, game_seed, 0)
         
+        # Debug Reset
+        # print(f"[StsEnv] Reset. Seed: {game_seed}. HP: {self.gc.cur_hp}/{self.gc.max_hp}. Floor: {self.gc.floor_num}. State: {self.gc.screen_state}")
+        
         self.step_count = 0
         self.obs_prev = observation.get_observation(self.gc)
+        self.last_state_val = -1
+        self.stuck_counter = 0
         
         return self.obs_prev, {}
 
@@ -79,6 +89,13 @@ class StsEnv(gym.Env):
         state_obj = self.gc.screen_state
         state = int(state_obj.value) if hasattr(state_obj, "value") else int(state_obj)
         
+        # Stuck Detection
+        if state == self.last_state_val:
+            self.stuck_counter += 1
+        else:
+            self.stuck_counter = 0
+            self.last_state_val = state
+            
         # 2. Handle Action based on State
         action_valid = False
         
@@ -88,69 +105,55 @@ class StsEnv(gym.Env):
                 # Play Card
                 hand = self.gc.hand
                 if action < len(hand):
-                    # Check Energy
                     card = hand[action]
-                    cost = card.get('costForTurn', 99) # Using dict from bindings
-                    # Get Energy from Observation (Index 2) or direct GC
-                    current_energy = self.gc.energy # Use direct access if available or from obs
+                    cost = card.get('costForTurn', 99) 
+                    # Energy is at index 2 in observation vector
+                    current_energy = self.obs_prev[2]
                     
                     if cost <= current_energy:
-                        # Valid Play
-                        # Auto-select target
                         alive_monsters = self._get_alive_monsters()
                         target_idx = 0
                         if alive_monsters:
-                            # Heuristic: Random target or first alive
-                            # For simple env, random valid target is standard
                             target_idx = random.choice(alive_monsters)
                         
                         try:
                             self.gc.play_card(int(action), target_idx)
                             action_valid = True
                         except Exception as e:
-                            # C++ exception means invalid logic deep down
                             action_valid = False
                     else:
-                        # Not enough energy
                         action_valid = False
                 else:
-                    # Index out of bounds (no card in that slot)
                     action_valid = False
                     
             elif action == 10:
-                # End Turn
                 self.gc.end_turn()
                 action_valid = True
                 
             else:
-                # Action 11-14 in Battle is Invalid
                 action_valid = False
                 
         else:
             # Non-Combat Logic
-            # Map Actions 11-14 to "Handle Screen"
-            # Or enforce specific actions?
-            # User said "11-14: Handle non-combat".
-            # Let's say any action >= 11 triggers the auto-handler for non-combat.
-            # And 0-10 are invalid in non-combat (punish trying to play cards in map).
-            
             if action >= 11:
-                self._handle_non_combat(state)
-                action_valid = True
+                # If we are stuck, force random choices or specific recovery
+                if self.stuck_counter > 5:
+                    # Force a random interactions to break loops
+                    # print(f"[StsEnv] Stuck in state {state} for {self.stuck_counter} steps. Forcing random action.")
+                    self._force_unstuck(state)
+                    action_valid = True # We handled it
+                else:
+                    self._handle_non_combat(state)
+                    action_valid = True
             else:
-                # Trying to play cards outside battle
                 action_valid = False
         
         # 3. Invalid Action Penalty
         if not action_valid:
             step_reward -= 0.1
-            # Do NOT update state (it didn't change anyway usually, or we prevented it)
-            # Just return same observation
-            # But wait, observation might change if animations finished? 
-            # In this fast env, usually no.
             info["error"] = "Invalid Action"
         else:
-            # 4. Calculate Rational Reward (Only if action was valid)
+            # 4. Calculate Rational Reward
             obs_curr = observation.get_observation(self.gc)
             r_rational, r_info = reward.calculate_rational_reward(self.gc, self.obs_prev, obs_curr)
             step_reward += r_rational
@@ -160,15 +163,34 @@ class StsEnv(gym.Env):
         # 5. Check Termination
         if self.gc.cur_hp <= 0:
             terminated = True
-            step_reward -= 10.0 # Death penalty
-        elif self.gc.floor_num > 16: # End of Act 1
+            step_reward -= 10.0
+        elif self.gc.floor_num > 16:
             terminated = True
-            step_reward += 20.0 # Act Clear Bonus
+            step_reward += 20.0
             
         if self.step_count >= self.max_steps:
             truncated = True
             
+        # Add Floor and HP to Info for Monitoring
+        info["floor"] = self.gc.floor_num
+        info["hp_percent"] = self.gc.cur_hp / self.gc.max_hp if self.gc.max_hp > 0 else 0
+            
         return self.obs_prev, step_reward, terminated, truncated, info
+
+    def _force_unstuck(self, state):
+        # Try brute force options to proceed
+        try: self.gc.choose_neow_option(random.randint(0,3)) 
+        except: pass
+        try: self.gc.choose_event_option(random.randint(0,2))
+        except: pass
+        try: self.gc.choose_campfire_option(0)
+        except: pass
+        try: self.gc.choose_map_node(random.randint(0,6))
+        except: pass
+        try: self.gc.claim_reward(random.randint(0,5))
+        except: pass
+        try: self.gc.regain_control()
+        except: pass
 
     def _get_alive_monsters(self):
         # Helper to find alive monster indices from observation or gc
@@ -187,20 +209,28 @@ class StsEnv(gym.Env):
         """
         Delegates non-combat logic to heuristics/MapEvaluator
         """
+        # print(f"Handling Non-Combat State: {state}")
+        
+        handled = False
+        
         if state == self.SCREEN_MAP:
             evaluator = map_evaluator.MapEvaluator(self.gc)
             best_x, _ = evaluator.evaluate_path()
             try:
                 self.gc.choose_map_node(best_x)
+                handled = True
             except:
                 # Fallback
-                try: self.gc.choose_map_node(0)
+                try: 
+                    self.gc.choose_map_node(0)
+                    handled = True
                 except: pass
                 
         elif state == self.SCREEN_REWARDS:
             rewards = self.gc.get_rewards()
             if not rewards:
                 self.gc.regain_control()
+                handled = True
             else:
                 # Simple Heuristic: Take Card if available, else first item
                 taken = False
@@ -214,37 +244,59 @@ class StsEnv(gym.Env):
                             break
                 if not taken:
                     # Take first reward
-                    self.gc.claim_reward(0)
+                    try:
+                        self.gc.claim_reward(0)
+                        handled = True
+                    except: pass
 
-        elif state == self.SCREEN_INVALID: # Neow
-            try: self.gc.choose_neow_option(0)
-            except: self.gc.regain_control()
+        elif state == self.SCREEN_INVALID: # Neow or Invalid
+            try: 
+                # Try Neow options
+                self.gc.choose_neow_option(0)
+                handled = True
+            except: 
+                try:
+                    self.gc.regain_control()
+                    handled = True
+                except: pass
             
         elif state == self.SCREEN_REST:
             # Simple Heuristic: Rest if HP < 50%, else Smith
-            if (self.gc.cur_hp / self.gc.max_hp) < 0.5:
-                self.gc.choose_campfire_option(0) # Rest
-            else:
-                self.gc.choose_campfire_option(1) # Smith (might fail if no smithable card?)
-                # Actually option 1 is smith? Need to check bindings. 
-                # Bindings: 0=Rest, 1=Smith.
-                # If smith fails (no card?), it might throw or do nothing.
-                # Safe fallback: Rest
-                # For now just Rest 0
-                pass 
+            try:
+                if (self.gc.cur_hp / self.gc.max_hp) < 0.5:
+                    self.gc.choose_campfire_option(0) # Rest
+                else:
+                    self.gc.choose_campfire_option(1) # Smith
+                handled = True
+            except:
+                try:
+                    self.gc.choose_campfire_option(0)
+                    handled = True
+                except: pass
             
-        # Default fallback for any other screen (Event, Treasure, etc)
-        # Try regain control
-        try:
-            self.gc.regain_control()
-        except:
-            pass
+        elif state == self.SCREEN_TREASURE:
+            try:
+                self.gc.choose_treasure_open()
+                handled = True
+            except: pass
             
-        # Specific handlers
-        if state == self.SCREEN_TREASURE:
-            self.gc.choose_treasure_open()
         elif state == self.SCREEN_EVENT:
-            self.gc.choose_event_option(0)
+            try:
+                self.gc.choose_event_option(0)
+                handled = True
+            except: pass
+            
         elif state == self.SCREEN_CARD_SELECT:
-            self.gc.choose_card_option(0)
+            try:
+                self.gc.choose_card_option(0)
+                handled = True
+            except: pass
+            
+        # Default fallback for any other screen (Event, Treasure, etc) or if specific handler failed
+        if not handled:
+            # Try regain control
+            try:
+                self.gc.regain_control()
+            except:
+                pass
 
