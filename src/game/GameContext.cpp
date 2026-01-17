@@ -693,6 +693,9 @@ void GameContext::populateFirstStrongEnemy(const MonsterEncounter monsters[], co
 }
 
 void GameContext::transitionToAct(int targetAct) {
+    // Safety: Clear the regainControlAction to prevent loops if regainControl is called again
+    regainControlAction = nullptr;
+    
     act = targetAct;
 
     if (cardRng.counter < 250) {
@@ -751,10 +754,19 @@ void GameContext::transitionToAct(int targetAct) {
 }
 
 void GameContext::transitionToMapNode(int mapNodeX) {
+    // Safety Check: Prevent walking off the map
+    if (curMapNodeY >= 15 && act != 4) {
+        std::cerr << "CRITICAL ERROR: Attempted to transitionToMapNode when curMapNodeY is " << curMapNodeY << " (Act " << act << ")" << std::endl;
+        return;
+    }
+
     lastRoom = curRoom;
     curMapNodeX = mapNodeX;
     ++floorNum;
     ++curMapNodeY;
+
+    // Debug Log for Floor Jumps
+    // std::cerr << "[GameContext] Transition to Map Node: Floor " << floorNum << " | Y: " << curMapNodeY << std::endl;
 
     const auto r = Random(seed + floorNum);
     miscRng = r;
@@ -1081,6 +1093,12 @@ void GameContext::setupTreasureRoom() {
 
 
 void GameContext::enterBossTreasureRoom() {
+    if (screenState == ScreenState::BOSS_RELIC_REWARDS) {
+        return;
+    }
+    // Debug Log
+    std::cerr << "[GameContext] enterBossTreasureRoom: Floor " << floorNum << " -> " << floorNum + 1 << " (Act " << act << ")" << std::endl;
+
     ++floorNum;
     Random r(seed+floorNum);
     miscRng = r;
@@ -3827,9 +3845,14 @@ void GameContext::openCardSelectScreen(CardSelectScreenType type, int selectCoun
 
 void GameContext::regainControl() {
     if (regainControlAction == nullptr) {
-        std::cerr << "regain control lambda was null" << "\n";
-//        assert(false);
+        // Fallback: If no specific action, return to map as a safe default
+        screenState = ScreenState::MAP_SCREEN;
+        regainControlAction = returnToMapAction;
+        // std::cerr << "regain control lambda was null, defaulting to MAP_SCREEN" << "\n";
     }
-    regainControlAction(*this);
+    
+    if (regainControlAction != nullptr) {
+        regainControlAction(*this);
+    }
 }
 
