@@ -387,6 +387,48 @@ PYBIND11_MODULE(slaythespire, m) {
                },
                "returns a copy of the exhaust pile from the current battle context"
         )
+        .def("get_map_info", [](GameContext &gc) {
+            pybind11::dict info;
+            info["current_x"] = gc.curMapNodeX;
+            info["current_y"] = gc.curMapNodeY;
+            
+            if (gc.map == nullptr) {
+                info["nodes"] = pybind11::list();
+                return info;
+            }
+            
+            pybind11::list floors;
+            for (int y = 0; y < 15; ++y) {
+                pybind11::list floor_nodes;
+                for (int x = 0; x < 7; ++x) {
+                    const auto &node = gc.map->nodes[y][x];
+                    if (node.room == Room::NONE) continue; 
+                    
+                    pybind11::dict n;
+                    n["x"] = node.x;
+                    n["y"] = node.y;
+                    n["room_type"] = node.room;
+                    n["symbol"] = std::string(1, node.getRoomSymbol());
+                    
+                    pybind11::list children;
+                    for (int i=0; i<node.edgeCount; ++i) {
+                        children.append(node.edges[i]);
+                    }
+                    n["children"] = children;
+                    
+                    pybind11::list parents;
+                    for (int i=0; i<node.parentCount; ++i) {
+                        parents.append(node.parents[i]);
+                    }
+                    n["parents"] = parents;
+                    
+                    floor_nodes.append(n);
+                }
+                floors.append(floor_nodes);
+            }
+            info["nodes"] = floors;
+            return info;
+        }, "Get full map info including current position and all nodes")
         .def("get_observation_props", [](GameContext &gc) {
              pybind11::dict d;
              if (sts::g_debug_bc != nullptr) {
