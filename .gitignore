@@ -11,6 +11,12 @@ __pycache__/
 *$py.class
 *.pyd
 
+# Training artifacts
+tensorboard_logs/
+logs/
+checkpoints/
+*.zip
+
 # Visual Studio / Windows
 .vs/
 *.sln
