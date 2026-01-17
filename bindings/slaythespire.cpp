@@ -345,6 +345,41 @@ PYBIND11_MODULE(slaythespire, m) {
                   sts::g_debug_bc->checkCombat(); // Trigger end logic
               }
          })
+        .def("debug_set_floor", [](GameContext &gc, int floor_num) {
+              int target_act = 1;
+              int target_y = -1;
+
+              if (floor_num <= 17) {
+                  target_act = 1;
+                  target_y = floor_num - 1;
+              } else if (floor_num <= 34) {
+                  target_act = 2;
+                  target_y = floor_num - 18;
+              } else {
+                  target_act = 3;
+                  target_y = floor_num - 35;
+              }
+
+              gc.act = target_act;
+              gc.floorNum = floor_num;
+              gc.curMapNodeY = target_y;
+              
+              gc.generateBoss();
+
+              if (target_y == 15) {
+                  gc.curRoom = Room::BOSS;
+                  gc.screenState = ScreenState::BATTLE;
+                  gc.info.encounter = gc.boss;
+                  
+                  if (sts::g_debug_bc != nullptr) {
+                      sts::g_debug_bc->init(gc, gc.boss);
+                  }
+                  
+                  gc.regainControlAction = [](GameContext &ctx) {
+                      ctx.afterBattle();
+                  };
+              }
+         }, "Force jump to floor (16/33/50 for Bosses)")
          .def("debug_set_state_card_select", [](GameContext &gc, int task_int, int pick_count) {
               if (sts::g_debug_bc != nullptr) {
                   sts::g_debug_bc->inputState = InputState::CARD_SELECT;

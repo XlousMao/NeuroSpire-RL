@@ -3846,9 +3846,30 @@ void GameContext::openCardSelectScreen(CardSelectScreenType type, int selectCoun
 void GameContext::regainControl() {
     if (regainControlAction == nullptr) {
         // Fallback: If no specific action, return to map as a safe default
-        screenState = ScreenState::MAP_SCREEN;
-        regainControlAction = returnToMapAction;
-        // std::cerr << "regain control lambda was null, defaulting to MAP_SCREEN" << "\n";
+        // Safety: If at Boss (Y=15), do NOT go to Map (causes crash). 
+        // Assume we are at Boss Relic or transition.
+        if (curMapNodeY >= 15) {
+             // Assume we finished boss and should move to next act or are in relic screen
+             // Force transition to next act if stuck here?
+             // Or set state to BOSS_RELIC_REWARDS so AI picks relic?
+             // If we already picked relic, we want to transition.
+             // Let's assume we want to transition if we are stuck here.
+             // But if we haven't picked relic?
+             // Let's set Screen to BOSS_RELIC_REWARDS.
+             screenState = ScreenState::BOSS_RELIC_REWARDS;
+             // And action to transition (if called again)
+             regainControlAction = [=](GameContext &gc) {
+                 if (gc.act < 3) {
+                    gc.transitionToAct(gc.act+1);
+                 } else {
+                    gc.outcome = GameOutcome::PLAYER_VICTORY;
+                 }
+             };
+        } else {
+             screenState = ScreenState::MAP_SCREEN;
+             regainControlAction = returnToMapAction;
+        }
+        // std::cerr << "regain control lambda was null, recovered based on Y" << "\n";
     }
     
     if (regainControlAction != nullptr) {
