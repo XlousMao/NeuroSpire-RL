@@ -21,7 +21,7 @@ class MapEvaluator:
     def evaluate_path(self):
         """
         Evaluates best next node from current position.
-        Returns: next_node_x (int)
+        Returns: next_node_x (int), best_score (float)
         """
         cur_x = self.map_info['current_x']
         cur_y = self.map_info['current_y']
@@ -29,22 +29,12 @@ class MapEvaluator:
         # Identify valid next nodes
         next_nodes = []
         if cur_y == -1:
-            # Start of act, any node on floor 0 is valid?
-            # Actually usually you pick from floor 0.
-            # Let's check map structure. Floor 0 nodes usually have no parents?
-            # Or are we selecting for Floor 0?
-            # Yes, if cur_y is -1, we choose from Floor 0.
-            # All nodes on floor 0 are candidates.
-            for n in self.nodes[0]:
-                next_nodes.append(n)
+            # Start of act
+            if self.nodes: # Check if nodes list is not empty
+                 for n in self.nodes[0]:
+                     next_nodes.append(n)
         else:
-            # We are at cur_y, choose for cur_y + 1
-            # Current node object
-            # Find current node in list
-            # We can just look at children of current node.
-            # But wait, map_info doesn't easily give "current node object" without searching.
-            # Let's search.
-            if cur_y < 14:
+            if cur_y < 14 and cur_y < len(self.nodes):
                 curr_node_obj = None
                 for n in self.nodes[cur_y]:
                     if n['x'] == cur_x:
@@ -52,18 +42,16 @@ class MapEvaluator:
                         break
                 
                 if curr_node_obj:
-                    # Children are X coordinates on next floor
                     children_xs = curr_node_obj['children']
-                    # Find these nodes on next floor
-                    next_floor = self.nodes[cur_y + 1]
-                    for nx in children_xs:
-                        for n in next_floor:
-                            if n['x'] == nx:
-                                next_nodes.append(n)
+                    if cur_y + 1 < len(self.nodes):
+                        next_floor = self.nodes[cur_y + 1]
+                        for nx in children_xs:
+                            for n in next_floor:
+                                if n['x'] == nx:
+                                    next_nodes.append(n)
         
         if not next_nodes:
-            # Should not happen unless at boss
-            return 0
+            return 0, 0.0 # Return tuple
             
         # Score each next node by simulating best path from it
         best_score = -9999.0
@@ -78,11 +66,6 @@ class MapEvaluator:
             if score > best_score:
                 best_score = score
                 best_node = node
-                
-        # Logging
-        # print(f"  [MapEval] Evaluated {len(next_nodes)} options.")
-        # for n, s in path_scores:
-        #     print(f"    -> Node {n['x']},{n['y']} ({n['symbol']}): {s:.1f}")
             
         return best_node['x'], best_score
 

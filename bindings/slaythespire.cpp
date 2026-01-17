@@ -75,14 +75,14 @@ PYBIND11_MODULE(slaythespire, m) {
             for (int i = 0; i < r.potionCount; ++i) {
                  pybind11::dict d;
                  d["type"] = "POTION";
-                 d["potion"] = r.potions[i];
+                 d["id"] = static_cast<int>(r.potions[i]);
                  rewards.push_back(d);
             }
 
             for (int i = 0; i < r.relicCount; ++i) {
                  pybind11::dict d;
                  d["type"] = "RELIC";
-                 d["relic"] = r.relics[i];
+                 d["relic"] = static_cast<int>(r.relics[i]);
                  rewards.push_back(d);
             }
 
