@@ -11,11 +11,12 @@
 #include <vector>
 
 namespace sts {
-    class GameContext;
+    struct GameContext;
 }
 
 namespace sts::search {
 
+    // 0-63 bits used
     struct GameAction {
 
         enum class RewardsActionType {

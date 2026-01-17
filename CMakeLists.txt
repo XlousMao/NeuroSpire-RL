@@ -8,15 +8,17 @@ project(
 file (GLOB_RECURSE sts_lightspeed_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_FLAGS  "-Wno-shift-count-overflow -O3")
+set(CMAKE_CXX_FLAGS  "-Wno-shift-count-overflow -O3 /EHsc")
 
 add_subdirectory(json)
-add_subdirectory(pybind11)
+# add_subdirectory(pybind11)
+find_package(pybind11 REQUIRED)
 
-pybind11_add_module(slaythespire bindings/slaythespire.cpp bindings/bindings-util.cpp ${sts_lightspeed_SOURCES})
+pybind11_add_module(slaythespire bindings/slaythespire.cpp bindings/bindings-util.cpp src/sim/PrintHelpers.cpp ${sts_lightspeed_SOURCES})
 target_include_directories(slaythespire PUBLIC include)
 target_include_directories(slaythespire PUBLIC json/single_include)
 target_include_directories(slaythespire PUBLIC bindings)
+target_include_directories(slaythespire PUBLIC json/include)
 
 
 add_executable(main apps/main.cpp ${sts_lightspeed_SOURCES})

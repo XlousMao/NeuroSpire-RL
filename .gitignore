@@ -1,3 +1,36 @@
 /cmake-build-*/
 /files/
 /.idea/
+
+# Build directory
+/build/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+
+# Visual Studio / Windows
+.vs/
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.suo
+*.user
+*.pdb
+*.lib
+*.obj
+*.dll
+*.exe
+*.exp
+*.ilk
+*.tlog
+*.idb
+*.ipdb
+*.iobj
+
+# VS Code / Editors
+.vscode/
+.trae/

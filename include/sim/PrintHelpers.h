@@ -18,11 +18,12 @@
 
 namespace sts {
 
-    class CardInstance;
-    class BattleContext;
-    class GameContext;
-    class Deck;
-
+    struct CardInstance;
+    struct BattleContext;
+    struct GameContext;
+    struct Deck;
+    struct Monster;
+    
     template<int size>
     static std::ostream& operator<<(std::ostream& os,  const fixed_list<Card, size> &cards) {
         os << '{';

@@ -16,8 +16,9 @@
 
 namespace sts {
 
-    class GameContext;
-    class Card;
+    struct GameContext;
+    struct Card;
+    struct CardInstance;
 
     struct CardManager {
 

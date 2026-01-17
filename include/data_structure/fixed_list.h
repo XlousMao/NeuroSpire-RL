@@ -35,19 +35,19 @@ namespace sts {
         }
 
         iterator begin() {
-            return arr.begin();
+            return arr.data();
         }
 
         const_iterator begin() const {
-            return arr.begin();
+            return arr.data();
         }
 
         iterator end() {
-            return arr.begin()+list_size;
+            return arr.data()+list_size;
         }
 
         const_iterator end() const {
-            return arr.begin()+list_size;
+            return arr.data()+list_size;
         }
 
         T& operator[](int idx) {
@@ -88,7 +88,7 @@ namespace sts {
         }
 
         void insert(iterator it, T t) {
-            for (T* i = arr.end()-1; i != it; --i) {
+            for (T* i = arr.data() + list_size; i > it; --i) {
                 *i = *(i-1);
             }
             *it = t;

@@ -17,7 +17,8 @@
 
 namespace sts {
 
-    class GameContext;
+    struct Card;
+    struct GameContext;
 
     struct Rewards {
         int goldRewardCount = 0;

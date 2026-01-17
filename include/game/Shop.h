@@ -13,7 +13,8 @@
 
 namespace sts {
 
-    class GameContext;
+    struct Card;
+    struct GameContext;
 
     struct Shop {
         int prices[13];
