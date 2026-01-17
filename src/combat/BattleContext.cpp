@@ -2928,53 +2928,20 @@ void BattleContext::chooseCodexCard(CardId id) {
 }
 
 void BattleContext::chooseDualWieldCard(int handIdx) {
-
-    // dual wield is so fucking buggy
-    // if you dual wield a ritual dagger:
-    // when there is no choice on which card to pick, the first one will change the card in the deck
-    // when there **is** a choice on which card to pick, neither will change the card in the deck XDD
+    if (handIdx < 0 || handIdx >= cards.cardsInHand) {
+        return;
+    }
 
     const int copyCount = cardSelectInfo.dualWield_CopyCount();
-    CardInstance dualWieldCard = cards.hand[handIdx];
-
-    // todo cleaner solution
-
-    fixed_list<CardInstance,10> validCards;
-    fixed_list<CardInstance,10> invalidCards;
-    for (int i = 0; i < cards.cardsInHand; ++i) {
-        const auto &c = cards.hand[i];
-        if (i == handIdx) {
-            continue;
-        }
-        if (c.getType() == CardType::ATTACK || c.getType() == CardType::POWER) {
-            validCards.push_back(c);
-        } else {
-            invalidCards.push_back(c);
-        }
-    }
-
-
-    int i = 0;
-    for (auto c : validCards) {
-        cards.hand[i++] = c;
-    }
-    for (auto c : invalidCards) {
-        cards.hand[i++] = c;
-    }
-
-    dualWieldCard.uniqueId = static_cast<std::int16_t>(cards.nextUniqueCardId++); // dual wield buggy
-    cards.hand[i++] = dualWieldCard;
+    CardInstance cardToCopy = cards.hand[handIdx];
 
     for (int x = 0; x < copyCount; ++x) {
         if (cards.cardsInHand + 1 <= CardManager::MAX_HAND_SIZE) {
-            cards.createTempCardInHand(dualWieldCard);
-
+            cards.createTempCardInHand(cardToCopy);
         } else {
-            cards.createTempCardInDiscard(dualWieldCard);
-
+            cards.createTempCardInDiscard(cardToCopy);
         }
     }
-
 }
 
 void BattleContext::chooseDiscardToHandCard(int discardIdx, bool forZeroCost) {

@@ -43,7 +43,21 @@ PYBIND11_MODULE(slaythespire, m) {
         .def("playout", &search::ScumSearchAgent2::playout);
 
     pybind11::class_<GameContext> gameContext(m, "GameContext");
-    gameContext.def(pybind11::init<CharacterClass, std::uint64_t, int>())
+    gameContext.def(pybind11::init([](CharacterClass cc, std::uint64_t seed, int asc) {
+            auto gc = new GameContext(cc, seed, asc);
+            // Setup global debug pointers for testing
+            if (sts::g_debug_bc) {
+                delete sts::g_debug_bc;
+                sts::g_debug_bc = nullptr;
+            }
+            sts::g_debug_bc = new BattleContext();
+            sts::g_debug_bc->init(*gc, gc->getMonsterForRoomCreation());
+            return gc;
+        }))
+        .def("debug_trigger_combat_rewards", [](GameContext &gc) {
+             sts::Rewards r = gc.createCombatReward();
+             gc.openCombatRewardScreen(r);
+        })
         .def("pick_reward_card", &sts::py::pickRewardCard, "choose to obtain the card at the specified index in the card reward list")
         .def("skip_reward_cards", &sts::py::skipRewardCards, "choose to skip the card reward (increases max_hp by 2 with singing bowl)")
         .def("get_card_reward", &sts::py::getCardReward, "return the current card reward list")
@@ -168,7 +182,162 @@ PYBIND11_MODULE(slaythespire, m) {
 
             return false;
         }, "Claim a reward by index. For cards, this selects the reward for picking.")
-        .def_property_readonly("encounter", [](const GameContext &gc) { return gc.info.encounter; })
+        .def("choose_card_option", [](GameContext &gc, int idx) {
+            if (sts::g_debug_bc == nullptr) {
+                return false;
+            }
+            auto &bc = *sts::g_debug_bc;
+            if (bc.inputState != InputState::CARD_SELECT) {
+                return false;
+            }
+
+            auto task = bc.cardSelectInfo.cardSelectTask;
+
+            if (task == CardSelectTask::EXHUME) {
+                int validIdx = -1;
+                int currentValidCount = 0;
+                for (int i = 0; i < bc.cards.exhaustPile.size(); ++i) {
+                     if (bc.cards.exhaustPile[i].id != CardId::EXHUME) {
+                         if (currentValidCount == idx) {
+                             validIdx = i;
+                             break;
+                         }
+                         currentValidCount++;
+                     }
+                }
+                if (validIdx != -1) {
+                    bc.chooseExhumeCard(validIdx);
+                    bc.inputState = InputState::EXECUTING_ACTIONS;
+                    return true;
+                }
+
+            } else if (task == CardSelectTask::DUAL_WIELD) {
+                int validIdx = -1;
+                int currentValidCount = 0;
+                for (int i = 0; i < bc.cards.cardsInHand; ++i) {
+                     auto type = bc.cards.hand[i].getType();
+                     if (type == CardType::ATTACK || type == CardType::POWER) {
+                         if (currentValidCount == idx) {
+                             validIdx = i;
+                             break;
+                         }
+                         currentValidCount++;
+                     }
+                }
+                if (validIdx != -1) {
+                    bc.chooseDualWieldCard(validIdx);
+                    bc.inputState = InputState::EXECUTING_ACTIONS;
+                    return true;
+                }
+
+            } else if (task == CardSelectTask::DISCOVERY) {
+                if (idx >= 0 && idx < 3) { 
+                     CardId id = bc.cardSelectInfo.cards[idx];
+                     bc.chooseDiscoveryCard(id);
+                     bc.inputState = InputState::EXECUTING_ACTIONS;
+                     return true;
+                }
+            } else if (task == CardSelectTask::ARMAMENTS) {
+                 int validIdx = -1;
+                 int currentValidCount = 0;
+                 for (int i = 0; i < bc.cards.cardsInHand; ++i) {
+                     if (bc.cards.hand[i].canUpgrade()) {
+                         if (currentValidCount == idx) {
+                             validIdx = i;
+                             break;
+                         }
+                         currentValidCount++;
+                     }
+                 }
+                 if (validIdx != -1) {
+                     bc.chooseArmamentsCard(validIdx);
+                     bc.inputState = InputState::EXECUTING_ACTIONS;
+                     return true;
+                 }
+            }
+
+            return false;
+        }, "Choose an option for the current card selection screen (Exhume, Dual Wield, Discovery, etc.)")
+        .def_property_readonly("hand",
+               [](const GameContext &gc) {
+                   pybind11::list cards;
+                   if (sts::g_debug_bc != nullptr) {
+                       for (int i = 0; i < sts::g_debug_bc->cards.cardsInHand; ++i) {
+                           const auto &c = sts::g_debug_bc->cards.hand[i];
+                           pybind11::dict d;
+                           d["id"] = c.getName(); // or c.getId() enum
+                           d["uuid"] = c.uniqueId;
+                           d["cost"] = c.cost;
+                           d["costForTurn"] = c.costForTurn;
+                           d["specialData"] = c.specialData;
+                           d["upgraded"] = c.isUpgraded();
+                           d["type"] = c.getType();
+                           cards.append(d);
+                       }
+                   }
+                   return cards;
+               },
+               "returns a list of dicts representing the hand from the current battle context"
+        )
+        .def("debug_set_hand_card_attrs", [](GameContext &gc, int idx, int costForTurn, int specialData) {
+            if (sts::g_debug_bc != nullptr && idx >= 0 && idx < sts::g_debug_bc->cards.cardsInHand) {
+                auto &c = sts::g_debug_bc->cards.hand[idx];
+                c.setCostForTurn(costForTurn);
+                c.specialData = specialData;
+            }
+        })
+        .def("debug_add_card_to_hand", [](GameContext &gc, CardId id) {
+            if (sts::g_debug_bc != nullptr) {
+                CardInstance c(id);
+                sts::g_debug_bc->cards.createTempCardInHand(c);
+            }
+        })
+        .def("debug_clear_hand", [](GameContext &gc) {
+             if (sts::g_debug_bc != nullptr) {
+                 sts::g_debug_bc->cards.cardsInHand = 0;
+             }
+        })
+        .def("debug_clear_exhaust", [](GameContext &gc) {
+             if (sts::g_debug_bc != nullptr) {
+                 sts::g_debug_bc->cards.exhaustPile.clear();
+             }
+        })
+        .def("debug_add_card_to_exhaust", [](GameContext &gc, CardId id) {
+             if (sts::g_debug_bc != nullptr) {
+                 CardInstance c(id);
+                 sts::g_debug_bc->cards.exhaustPile.push_back(c);
+             }
+        })
+        .def("debug_kill_all_monsters", [](GameContext &gc) {
+              if (sts::g_debug_bc != nullptr) {
+                  for (int i = 0; i < sts::g_debug_bc->monsters.monsterCount; ++i) {
+                      sts::g_debug_bc->monsters.arr[i].curHp = 0;
+                  }
+                  sts::g_debug_bc->checkCombat(); // Trigger end logic
+              }
+         })
+         .def("debug_set_state_card_select", [](GameContext &gc, int task_int, int pick_count) {
+              if (sts::g_debug_bc != nullptr) {
+                  sts::g_debug_bc->inputState = InputState::CARD_SELECT;
+                  sts::g_debug_bc->cardSelectInfo.cardSelectTask = static_cast<CardSelectTask>(task_int);
+                  sts::g_debug_bc->cardSelectInfo.pickCount = pick_count;
+              }
+         })
+         .def("debug_set_discovery_data", [](GameContext &gc, int copy_count) {
+              if (sts::g_debug_bc != nullptr) {
+                  sts::g_debug_bc->cardSelectInfo.discovery_CopyCount() = copy_count;
+                  // Set dummy cards for discovery
+                  sts::g_debug_bc->cardSelectInfo.cards[0] = CardId::STRIKE_RED;
+                  sts::g_debug_bc->cardSelectInfo.cards[1] = CardId::DEFEND_RED;
+                  sts::g_debug_bc->cardSelectInfo.cards[2] = CardId::BASH;
+              }
+         })
+         .def("debug_set_dual_wield_data", [](GameContext &gc, int copy_count) {
+              if (sts::g_debug_bc != nullptr) {
+                  sts::g_debug_bc->cardSelectInfo.dualWield_CopyCount() = copy_count;
+              }
+         })
+         .def_property_readonly("encounter", [](const GameContext &gc) { return gc.info.encounter; })
         .def_property_readonly("deck",
                [](const GameContext &gc) { return std::vector(gc.deck.cards.begin(), gc.deck.cards.end());},
                "returns a copy of the list of cards in the deck"
