@@ -413,7 +413,8 @@ void CardManager::draw(BattleContext &bc, int amount) {
 
         if (c.getType() == CardType::SKILL) {
             if (bc.player.hasStatus<PS::CORRUPTION>()) {
-                c.setCostForTurn(-9);
+                c.cost = 0;
+                c.setCostForTurn(0);
             }
 
         } else if (c.getType() == CardType::STATUS) {

@@ -1770,7 +1770,7 @@ void GameContext::addPotionRewards(Rewards &r) {
 
     } else {
         r.addPotion(returnRandomPotion(potionRng, cc));
-        potionChance -= 10;
+        potionChance = 0;
     }
 }
 

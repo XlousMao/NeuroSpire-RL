@@ -15,6 +15,7 @@
 #include "sim/SimHelpers.h"
 #include "sim/PrintHelpers.h"
 #include "game/Game.h"
+#include "combat/BattleContext.h"
 
 #include "slaythespire.h"
 
@@ -46,10 +47,147 @@ PYBIND11_MODULE(slaythespire, m) {
         .def("pick_reward_card", &sts::py::pickRewardCard, "choose to obtain the card at the specified index in the card reward list")
         .def("skip_reward_cards", &sts::py::skipRewardCards, "choose to skip the card reward (increases max_hp by 2 with singing bowl)")
         .def("get_card_reward", &sts::py::getCardReward, "return the current card reward list")
+        .def("get_rewards", [](GameContext &gc) {
+            std::vector<pybind11::dict> rewards;
+            auto &r = gc.info.rewardsContainer;
+
+            for (int i = 0; i < r.goldRewardCount; ++i) {
+                 pybind11::dict d;
+                 d["type"] = "GOLD";
+                 d["amount"] = r.gold[i];
+                 rewards.push_back(d);
+            }
+
+            for (int i = 0; i < r.potionCount; ++i) {
+                 pybind11::dict d;
+                 d["type"] = "POTION";
+                 d["potion"] = r.potions[i];
+                 rewards.push_back(d);
+            }
+
+            for (int i = 0; i < r.relicCount; ++i) {
+                 pybind11::dict d;
+                 d["type"] = "RELIC";
+                 d["relic"] = r.relics[i];
+                 rewards.push_back(d);
+            }
+
+            for (int i = 0; i < r.cardRewardCount; ++i) {
+                 pybind11::dict d;
+                 d["type"] = "CARD";
+                 std::vector<Card> cards;
+                 for (const auto &c : r.cardRewards[i]) {
+                     cards.push_back(c);
+                 }
+                 d["cards"] = cards;
+                 rewards.push_back(d);
+            }
+            
+            if (r.emeraldKey) {
+                 pybind11::dict d;
+                 d["type"] = "EMERALD_KEY";
+                 rewards.push_back(d);
+            }
+            if (r.sapphireKey) {
+                 pybind11::dict d;
+                 d["type"] = "SAPPHIRE_KEY";
+                 rewards.push_back(d);
+            }
+
+            return rewards;
+        }, "Get a list of available rewards")
+        .def("claim_reward", [](GameContext &gc, int idx) {
+            if (gc.screenState != ScreenState::REWARDS) {
+                 return false;
+            }
+            
+            auto &r = gc.info.rewardsContainer;
+            int currentIdx = 0;
+
+            // Gold
+            if (idx < currentIdx + r.goldRewardCount) {
+                 int localIdx = idx - currentIdx;
+                 gc.obtainGold(r.gold[localIdx]);
+                 r.removeGoldReward(localIdx);
+                 if (r.getTotalCount() == 0) gc.regainControl();
+                 return true;
+            }
+            currentIdx += r.goldRewardCount;
+
+            // Potions
+            if (idx < currentIdx + r.potionCount) {
+                 int localIdx = idx - currentIdx;
+                 gc.obtainPotion(r.potions[localIdx]);
+                 r.removePotionReward(localIdx);
+                 if (r.getTotalCount() == 0) gc.regainControl();
+                 return true;
+            }
+            currentIdx += r.potionCount;
+
+            // Relics
+            if (idx < currentIdx + r.relicCount) {
+                 int localIdx = idx - currentIdx;
+                 gc.obtainRelic(r.relics[localIdx]);
+                 r.removeRelicReward(localIdx);
+                 if (r.getTotalCount() == 0) gc.regainControl();
+                 return true;
+            }
+            currentIdx += r.relicCount;
+
+            // Cards
+            if (idx < currentIdx + r.cardRewardCount) {
+                 int localIdx = idx - currentIdx;
+                 // Swap to end to support pickRewardCard
+                 if (localIdx != r.cardRewardCount - 1) {
+                     std::swap(r.cardRewards[localIdx], r.cardRewards[r.cardRewardCount - 1]);
+                 }
+                 // Do NOT remove. User must call pick_reward_card.
+                 return true; 
+            }
+            currentIdx += r.cardRewardCount;
+
+            // Keys
+            if (r.emeraldKey) {
+                if (idx == currentIdx) {
+                    gc.obtainKey(Key::EMERALD_KEY);
+                    r.emeraldKey = false;
+                    if (r.getTotalCount() == 0) gc.regainControl();
+                    return true;
+                }
+                currentIdx++;
+            }
+            if (r.sapphireKey) {
+                if (idx == currentIdx) {
+                    gc.obtainKey(Key::SAPPHIRE_KEY);
+                    r.sapphireKey = false;
+                    if (r.getTotalCount() == 0) gc.regainControl();
+                    return true;
+                }
+                currentIdx++;
+            }
+
+            return false;
+        }, "Claim a reward by index. For cards, this selects the reward for picking.")
         .def_property_readonly("encounter", [](const GameContext &gc) { return gc.info.encounter; })
         .def_property_readonly("deck",
                [](const GameContext &gc) { return std::vector(gc.deck.cards.begin(), gc.deck.cards.end());},
                "returns a copy of the list of cards in the deck"
+        )
+        .def_property_readonly("exhaust_pile",
+               [](const GameContext &gc) {
+                   std::vector<Card> cards;
+                   if (sts::g_debug_bc != nullptr) {
+                       for (const auto &c : sts::g_debug_bc->cards.exhaustPile) {
+                           Card card(c.getId(), c.getUpgradeCount());
+                           if (c.getId() != CardId::SEARING_BLOW) {
+                               card.misc = c.specialData;
+                           }
+                           cards.push_back(card);
+                       }
+                   }
+                   return cards;
+               },
+               "returns a copy of the exhaust pile from the current battle context"
         )
         .def("obtain_card",
              [](GameContext &gc, Card card) { gc.deck.obtain(gc, card); },

@@ -206,7 +206,7 @@ namespace sts {
         float shopChance = 0.03f;
         float treasureChance = 0.02f;
         int potionChance = 0;
-        int cardRarityFactor = 5;
+        int cardRarityFactor = 0;
         int shopRemoveCount = 0;
         bool speedrunPace = false; // todo load from save
 

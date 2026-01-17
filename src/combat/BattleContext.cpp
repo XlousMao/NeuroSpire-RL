@@ -2833,13 +2833,7 @@ void BattleContext::triggerAndMoveToExhaustPile(CardInstance c) {
         addToBot(Actions::GainBlock(player.getStatus<PS::FEEL_NO_PAIN>()));
     }
 
-    if (c.getId() == CardId::NECRONOMICURSE) {
-        addToBot(Actions::MakeTempCardInHand(CardId::NECRONOMICURSE));
-    }
-
-    if (c.getId() == CardId::SENTINEL) {
-        player.gainEnergy(c.isUpgraded() ? 3 : 2); // the game adds to bot here
-    }
+    c.triggerOnExhaust(*this);
 
     cards.moveToExhaustPile(c);
 }
@@ -3000,7 +2994,8 @@ void BattleContext::chooseDiscoveryCard(CardId id) {
     for (int i = 0; i < discoveryAmount; ++i) {
         if (cards.cardsInHand + 1 <= CardManager::MAX_HAND_SIZE) {
             if (player.hasStatus<PS::CORRUPTION>() && c.getType() == CardType::SKILL) {
-                c.setCostForTurn(-9);
+                c.cost = 0;
+                c.setCostForTurn(0);
             }
             cards.createTempCardInHand(c);
 
@@ -3044,7 +3039,18 @@ void BattleContext::chooseHeadbuttCard(int discardIdx) {
 }
 
 void BattleContext::chooseRecycleCard(int handIdx) {
-    // todo
+    auto c = cards.hand[handIdx];
+    int gain = c.costForTurn;
+    if (c.isXCost()) {
+        gain = player.energy;
+    }
+
+    cards.removeFromHandAtIdx(handIdx);
+    triggerAndMoveToExhaustPile(c);
+
+    if (gain > 0) {
+        addToTop(Actions::GainEnergy(gain));
+    }
 }
 
 void BattleContext::chooseWarcryCard(int handIdx) {

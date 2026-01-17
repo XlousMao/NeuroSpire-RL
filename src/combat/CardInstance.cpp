@@ -207,8 +207,8 @@ std::ostream &CardInstance::printSimpleDesc(std::ostream &os) const {
 void CardInstance::triggerOnExhaust(BattleContext &bc) {
     if (id == CardId::SENTINEL) {
         bc.addToTop( Actions::GainEnergy(upgraded ? 3 : 2) );
-    } else if (id == CardId::CURSE_OF_THE_BELL) {
-        bc.addToBot(Actions::MakeTempCardInHand(CardId::CURSE_OF_THE_BELL) );
+    } else if (id == CardId::NECRONOMICURSE) {
+        bc.addToBot(Actions::MakeTempCardInHand(CardId::NECRONOMICURSE));
     }
 }
 
