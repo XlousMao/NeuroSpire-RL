@@ -174,7 +174,16 @@ class StsEnv(gym.Env):
         # Add Floor and HP to Info for Monitoring
         info["floor"] = self.gc.floor_num
         info["hp_percent"] = self.gc.cur_hp / self.gc.max_hp if self.gc.max_hp > 0 else 0
-            
+        
+        # --- Heartbeat & Debug Logging ---
+        # Print critical stats every 100 steps or if special condition
+        if self.step_count % 1000 == 0: # Reduce frequency to avoid log spam
+             print(f"[StsEnv-{id(self)}] Step: {self.step_count} | Floor: {self.gc.floor_num} | HP: {self.gc.cur_hp}/{self.gc.max_hp}")
+        
+        # Verify HP consistency
+        # if self.gc.cur_hp == self.gc.max_hp and self.gc.floor_num > 5:
+             # print(f"[Debug] Perfect HP at Floor {self.gc.floor_num}. HP: {self.gc.cur_hp}")
+             
         return self.obs_prev, step_reward, terminated, truncated, info
 
     def _force_unstuck(self, state):
