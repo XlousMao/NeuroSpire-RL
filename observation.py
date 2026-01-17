@@ -99,9 +99,11 @@ def get_observation(gc):
     # Gold (Normalized by approx max gold 1000)
     vec.append(data.get("gold", 0) / 1000.0)
     
+    # Deck Size (Normalized by 50) - NEW for Reward Calc
+    vec.append(data.get("deck_size", 10) / 50.0)
+    
     # Core Relics/Powers (Booleans)
     vec.append(1.0 if data.get("has_corruption", False) else 0.0)
     vec.append(1.0 if data.get("has_dark_embrace", False) else 0.0)
-    vec.append(1.0 if data.get("has_dead_branch", False) else 0.0)
     
     return np.array(vec, dtype=np.float32)

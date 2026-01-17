@@ -394,16 +394,16 @@ PYBIND11_MODULE(slaythespire, m) {
                  const auto &p = bc.player;
                  
                  // Player Stats
-                  d["cur_hp"] = p.curHp;
-                  d["max_hp"] = p.maxHp;
-                  d["gold"] = p.gold; // Player struct has gold? Yes.
-                  d["block"] = p.block;
-                  d["energy"] = p.energy;
+                 d["cur_hp"] = p.curHp;
+                 d["max_hp"] = p.maxHp;
+                 d["gold"] = p.gold; // Player struct has gold? Yes.
+                 d["block"] = p.block;
+                 d["energy"] = p.energy;
                  
-                 // Player Buffs
                  d["strength"] = p.strength;
                  d["dexterity"] = p.dexterity;
-                 d["focus"] = p.focus; // For defect, but harmless
+                 d["floor"] = gc.floorNum;
+                 d["deck_size"] = gc.deck.size();
                  d["vulnerable"] = p.hasStatus<PlayerStatus::VULNERABLE>() ? p.getStatus<PlayerStatus::VULNERABLE>() : 0;
                  d["weak"] = p.hasStatus<PlayerStatus::WEAK>() ? p.getStatus<PlayerStatus::WEAK>() : 0;
                  d["frail"] = p.hasStatus<PlayerStatus::FRAIL>() ? p.getStatus<PlayerStatus::FRAIL>() : 0;
