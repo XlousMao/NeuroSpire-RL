@@ -258,7 +258,36 @@ PYBIND11_MODULE(slaythespire, m) {
 
             return false;
         }, "Choose an option for the current card selection screen (Exhume, Dual Wield, Discovery, etc.)")
-        .def_property_readonly("hand",
+        .def("play_card", [](GameContext &gc, int handIdx, int targetIdx) {
+            if (sts::g_debug_bc == nullptr) return false;
+            auto &bc = *sts::g_debug_bc;
+            if (handIdx < 0 || handIdx >= bc.cards.cardsInHand) return false;
+            
+            CardInstance c = bc.cards.hand[handIdx];
+            bc.addToBotCard(CardQueueItem(c, targetIdx, bc.player.energy));
+            bc.executeActions();
+            return true;
+        }, "Play a card from hand")
+        .def("end_turn", [](GameContext &gc) {
+            if (sts::g_debug_bc == nullptr) return;
+            sts::g_debug_bc->endTurn();
+            sts::g_debug_bc->executeActions();
+        }, "End the current turn")
+        .def("choose_map_node", &GameContext::transitionToMapNode, "Transition to a map node (X coordinate)")
+        .def("choose_campfire_option", &GameContext::chooseCampfireOption, "Choose campfire option (0=Rest, 1=Smith)")
+        .def("choose_event_option", &GameContext::chooseEventOption, "Choose event option")
+        .def("choose_boss_relic", &GameContext::chooseBossRelic, "Choose boss relic")
+        .def("choose_treasure_open", [](GameContext &gc) { gc.chooseTreasureRoomOption(true); }, "Open treasure chest")
+         .def("choose_neow_option", [](GameContext &gc, int idx) {
+             if (idx < 0 || idx >= 4) return;
+             gc.chooseNeowOption(gc.info.neowRewards[idx]);
+         }, "Choose Neow option (0-3)")
+         .def("regain_control", &GameContext::regainControl, "Proceed from current screen")
+         .def_property_readonly("screen_state", [](const GameContext &gc) { return static_cast<int>(gc.screenState); })
+         .def_property_readonly("cur_hp", [](const GameContext &gc) { return gc.curHp; })
+         .def_property_readonly("max_hp", [](const GameContext &gc) { return gc.maxHp; })
+         .def_property_readonly("floor_num", [](const GameContext &gc) { return gc.floorNum; })
+         .def_property_readonly("hand",
                [](const GameContext &gc) {
                    pybind11::list cards;
                    if (sts::g_debug_bc != nullptr) {
